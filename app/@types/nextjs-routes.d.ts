@@ -12,23 +12,31 @@ declare module "nextjs-routes" {
 
   export type Route =
     | StaticRoute<"/account/signin">
+    | StaticRoute<"/admin/impersonate">
     | StaticRoute<"/admin/jobs">
     | DynamicRoute<"/api/auth/[...nextauth]", { "nextauth": string[] }>
     | StaticRoute<"/api/experiments/og-image">
+    | StaticRoute<"/api/healthcheck">
+    | DynamicRoute<"/api/internal/v1/[...trpc]", { "trpc": string[] }>
+    | StaticRoute<"/api/internal/v1/openapi">
     | DynamicRoute<"/api/trpc/[trpc]", { "trpc": string }>
     | DynamicRoute<"/api/v1/[...trpc]", { "trpc": string[] }>
     | StaticRoute<"/api/v1/openapi">
-    | StaticRoute<"/dashboard">
-    | DynamicRoute<"/experiments/[experimentSlug]", { "experimentSlug": string }>
-    | StaticRoute<"/experiments">
+    | DynamicRoute<"/datasets/[id]/[tab]", { "id": string; "tab": string }>
+    | DynamicRoute<"/datasets/[id]", { "id": string }>
+    | StaticRoute<"/datasets">
+    | DynamicRoute<"/evals/[id]/[tab]", { "id": string; "tab": string }>
+    | DynamicRoute<"/evals/[id]", { "id": string }>
+    | StaticRoute<"/evals">
+    | DynamicRoute<"/fine-tunes/[id]/[tab]", { "id": string; "tab": string }>
+    | DynamicRoute<"/fine-tunes/[id]", { "id": string }>
     | StaticRoute<"/fine-tunes">
     | StaticRoute<"/">
     | DynamicRoute<"/invitations/[invitationToken]", { "invitationToken": string }>
     | StaticRoute<"/project/settings">
     | StaticRoute<"/request-logs">
     | StaticRoute<"/sentry-example-page">
-    | StaticRoute<"/world-champs">
-    | StaticRoute<"/world-champs/signup">;
+    | StaticRoute<"/usage">;
 
   interface StaticRoute<Pathname> {
     pathname: Pathname;

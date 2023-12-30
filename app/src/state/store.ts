@@ -4,32 +4,38 @@ import { enableMapSet } from "immer";
 import { persist } from "zustand/middleware";
 import { createSelectors } from "./createSelectors";
 import {
-  type SharedVariantEditorSlice,
-  createVariantEditorSlice,
-} from "./sharedVariantEditor.slice";
+  type SharedArgumentsEditorSlice,
+  createArgumentsEditorSlice,
+} from "./sharedArgumentsEditor.slice";
 import { type APIClient } from "~/utils/api";
 import { type PersistedState, persistOptions } from "./persist";
 import { type SelectedLogsSlice, createSelectedLogsSlice } from "./selectedLogsSlice";
-import { type LogFiltersSlice, createLogFiltersSlice } from "./logFiltersSlice";
-import { type ColumnVisibilitySlice, createColumnVisibilitySlice } from "./columnVisiblitySlice";
+import {
+  type SelectedDatasetEntriesSlice,
+  createSelectedDatasetEntriesSlice,
+} from "./selectedDatasetEntriesSlice";
+import { type ColumnVisibilitySlice, createColumnVisibilitySlice } from "./columnVisibilitySlice";
 import { type FeatureFlagsSlice, createFeatureFlagsSlice } from "./featureFlags";
+import { type EvaluationsSlice, createEvaluationsSlice } from "./evaluationsSlice";
 
 enableMapSet();
 
 export type State = {
   isRehydrated: boolean;
-  drawerOpen: boolean;
-  openDrawer: () => void;
-  closeDrawer: () => void;
+  isMounted: boolean;
+  markMounted: () => void;
   api: APIClient | null;
   setApi: (api: APIClient) => void;
-  sharedVariantEditor: SharedVariantEditorSlice;
+  betaBannerDismissed: boolean;
+  dismissBetaBanner: () => void;
+  sharedArgumentsEditor: SharedArgumentsEditorSlice;
   selectedProjectId: string | null;
   setSelectedProjectId: (id: string) => void;
   selectedLogs: SelectedLogsSlice;
-  logFilters: LogFiltersSlice;
+  selectedDatasetEntries: SelectedDatasetEntriesSlice;
   columnVisibility: ColumnVisibilitySlice;
   featureFlags: FeatureFlagsSlice;
+  evaluationsSlice: EvaluationsSlice;
 };
 
 export type SliceCreator<T> = StateCreator<State, [["zustand/immer", never]], [], T>;
@@ -41,30 +47,32 @@ const useBaseStore = create<State, [["zustand/persist", PersistedState], ["zusta
   persist(
     immer((set, get, ...rest) => ({
       isRehydrated: false,
+      isMounted: false,
+      markMounted: () =>
+        set((state) => {
+          state.isMounted = true;
+        }),
       api: null,
       setApi: (api) =>
         set((state) => {
           state.api = api;
         }),
-      drawerOpen: false,
-      openDrawer: () =>
+      betaBannerDismissed: false,
+      dismissBetaBanner: () =>
         set((state) => {
-          state.drawerOpen = true;
+          state.betaBannerDismissed = true;
         }),
-      closeDrawer: () =>
-        set((state) => {
-          state.drawerOpen = false;
-        }),
-      sharedVariantEditor: createVariantEditorSlice(set, get, ...rest),
+      sharedArgumentsEditor: createArgumentsEditorSlice(set, get, ...rest),
       selectedProjectId: null,
       setSelectedProjectId: (id: string) =>
         set((state) => {
           state.selectedProjectId = id;
         }),
       selectedLogs: createSelectedLogsSlice(set, get, ...rest),
-      logFilters: createLogFiltersSlice(set, get, ...rest),
+      selectedDatasetEntries: createSelectedDatasetEntriesSlice(set, get, ...rest),
       columnVisibility: createColumnVisibilitySlice(set, get, ...rest),
       featureFlags: createFeatureFlagsSlice(set, get, ...rest),
+      evaluationsSlice: createEvaluationsSlice(set, get, ...rest),
     })),
     persistOptions,
   ),

@@ -13,6 +13,8 @@ import { type Session } from "next-auth";
 import superjson from "superjson";
 import { type OpenApiMeta } from "trpc-openapi";
 import { ZodError } from "zod";
+import * as Sentry from "@sentry/nextjs";
+
 import { getServerAuthSession } from "~/server/auth";
 import { prisma } from "~/server/db";
 import { capturePath } from "~/utils/analytics/serverAnalytics";
@@ -27,6 +29,7 @@ import { capturePath } from "~/utils/analytics/serverAnalytics";
 
 type CreateContextOptions = {
   session: Session | null;
+  cookies: Partial<{ [key: string]: string }>;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
@@ -45,6 +48,7 @@ const noOp = () => {};
 export const createInnerTRPCContext = (opts: CreateContextOptions) => {
   return {
     session: opts.session,
+    cookies: opts.cookies,
     prisma,
     markAccessControlRun: noOp,
   };
@@ -64,6 +68,7 @@ export const createTRPCContext = async (opts: CreateNextContextOptions) => {
 
   return createInnerTRPCContext({
     session,
+    cookies: req.cookies,
   });
 };
 
@@ -107,6 +112,12 @@ const t = initTRPC
  */
 export const createTRPCRouter = t.router;
 
+const sentryMiddleware = t.middleware(
+  Sentry.Handlers.trpcMiddleware({
+    attachRpcInput: true,
+  }),
+);
+
 /**
  * Public (unauthenticated) procedure
  *
@@ -114,7 +125,7 @@ export const createTRPCRouter = t.router;
  * guarantee that a user querying is authorized, but you can still access user session data if they
  * are logged in.
  */
-export const publicProcedure = t.procedure;
+export const publicProcedure = t.procedure.use(sentryMiddleware);
 
 /** Reusable middleware that enforces users are logged in before running the procedure. */
 const enforceUserIsAuthed = t.middleware(async ({ ctx, next, path }) => {
@@ -132,7 +143,8 @@ const enforceUserIsAuthed = t.middleware(async ({ ctx, next, path }) => {
       },
     },
   });
-  if (!accessControlRun)
+
+  if (resp.ok && !accessControlRun)
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
       message:
@@ -152,4 +164,6 @@ const enforceUserIsAuthed = t.middleware(async ({ ctx, next, path }) => {
  *
  * @see https://trpc.io/docs/procedures
  */
-export const protectedProcedure = t.procedure.use(enforceUserIsAuthed);
+export const protectedProcedure = t.procedure.use(
+  sentryMiddleware.unstable_pipe(enforceUserIsAuthed),
+);

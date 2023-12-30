@@ -9,8 +9,8 @@ export const openApiDocument = generateOpenApiDocument(v1ApiRouter, {
   baseUrl: "https://app.openpipe.ai/api/v1",
 });
 // Respond with our OpenAPI schema
-const hander = (req: NextApiRequest, res: NextApiResponse) => {
+const handler = (req: NextApiRequest, res: NextApiResponse) => {
   res.status(200).send(openApiDocument);
 };
 
-export default hander;
+export default handler;

@@ -1,16 +1,20 @@
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { type GetServerSidePropsContext } from "next";
-import { getServerSession, type NextAuthOptions, type DefaultSession } from "next-auth";
-import { prisma } from "~/server/db";
-import GitHubModule from "next-auth/providers/github";
-import { env } from "~/env.mjs";
+import {
+  getServerSession,
+  type NextAuthOptions,
+  type DefaultSession,
+  type Profile,
+} from "next-auth";
+import * as Sentry from "@sentry/nextjs";
+import GitHubModule, { type GithubProfile } from "next-auth/providers/github";
 
-// The client codegen script doesn't properly read the default export
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const untypedGitHubModule = GitHubModule as unknown as any;
-const GitHubProvider: typeof GitHubModule = untypedGitHubModule.default
-  ? untypedGitHubModule.default
-  : untypedGitHubModule;
+import { prisma } from "~/server/db";
+import { env } from "~/env.mjs";
+import { ensureDefaultExport } from "~/utils/utils";
+import { captureSignup } from "~/utils/analytics/serverAnalytics";
+
+const GitHubProvider = ensureDefaultExport(GitHubModule);
 
 /**
  * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
@@ -48,11 +52,31 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   },
+  events: {
+    signIn({ user, profile, isNewUser }) {
+      Sentry.setUser({ id: user.id });
+      if (isNewUser) {
+        captureSignup(user, (profile as Profile & { gitHubUsername: string }).gitHubUsername);
+      }
+    },
+    signOut() {
+      Sentry.setUser(null);
+    },
+  },
   adapter: PrismaAdapter(prisma),
   providers: [
     GitHubProvider({
       clientId: env.GITHUB_CLIENT_ID,
       clientSecret: env.GITHUB_CLIENT_SECRET,
+      profile(profile: GithubProfile) {
+        return {
+          id: profile.id.toString(),
+          name: profile.name ?? profile.login,
+          email: profile.email,
+          image: profile.avatar_url,
+          gitHubUsername: profile.login,
+        };
+      },
     }),
   ],
   theme: {
@@ -66,9 +90,13 @@ export const authOptions: NextAuthOptions = {
  *
  * @see https://next-auth.js.org/configuration/nextjs
  */
-export const getServerAuthSession = (ctx: {
+export const getServerAuthSession = async (ctx: {
   req: GetServerSidePropsContext["req"];
   res: GetServerSidePropsContext["res"];
 }) => {
-  return getServerSession(ctx.req, ctx.res, authOptions);
+  const session = await getServerSession(ctx.req, ctx.res, authOptions);
+  if (session?.user?.id) {
+    Sentry.setUser({ id: session?.user?.id, email: session?.user?.email ?? undefined });
+  }
+  return session;
 };

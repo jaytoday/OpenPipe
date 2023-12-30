@@ -1,33 +1,55 @@
 {
   "name": "openpipe-dev",
-  "version": "0.3.3",
+  "version": "0.6.6",
   "type": "module",
-  "description": "Metrics and auto-evaluation for LLM calls",
+  "description": "LLM metrics and inference",
   "scripts": {
     "build": "./build.sh",
+    "build-update": "./build.sh && ./update-app.sh",
     "test": "vitest"
   },
-  "main": "./index.ts",
+  "main": "./src/index.ts",
   "publishConfig": {
+    "name": "openpipe",
     "access": "public",
-    "main": "./index.js"
+    "main": "./index.cjs",
+    "module": "./index.js",
+    "types": "./index.d.ts",
+    "exports": {
+      ".": {
+        "import": "./index.js",
+        "require": "./index.cjs"
+      },
+      "./openai": {
+        "import": "./openai.js",
+        "require": "./openai.cjs"
+      },
+      "./openai/mergeChunks": {
+        "import": "./openai/mergeChunks.js",
+        "require": "./openai/mergeChunks.cjs"
+      }
+    }
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "encoding": "^0.1.13",
-    "form-data": "^4.0.0",
-    "lodash-es": "^4.17.21",
-    "node-fetch": "^2.6.12",
-    "openai-beta": "npm:openai@4.0.0-beta.7",
+    "encoding": "0.1.13",
+    "form-data": "4.0.0",
+    "node-fetch": "2.6.12",
+    "openai": "4.17.1",
     "openai-legacy": "npm:openai@3.3.0"
   },
   "devDependencies": {
-    "@types/lodash-es": "^4.17.8",
+    "@rollup/plugin-json": "^6.0.0",
+    "@rollup/plugin-node-resolve": "^15.2.1",
     "@types/node": "^20.4.8",
     "@types/node-fetch": "^2.6.4",
     "dotenv": "^16.3.1",
+    "rollup": "^3.28.1",
+    "rollup-plugin-typescript2": "^0.35.0",
+    "tslib": "^2.6.2",
+    "tsup": "^7.2.0",
     "tsx": "^3.12.7",
     "typescript": "^5.0.4",
     "vitest": "^0.33.0"

@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "trainer"
+version = "0.1.0"
+description = ""
+authors = ["Kyle Corbitt <kyle@openpipe.ai>", "David Corbitt <davidlcorbitt@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.scripts]
+test = "pytest-watch --runner 'pytest -rP -m focus'"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+modal = "0.55.4094"
+python-dotenv = "^1.0.0"
+boto3 = "^1.34.8"
+
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.9.1"
+openapi-python-client = "^0.15.2"
+huggingface-hub = "0.17.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

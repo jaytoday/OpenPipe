@@ -13,30 +13,21 @@ import {
   Text,
   Button,
   Checkbox,
-  NumberInput,
-  NumberInputField,
-  NumberInputStepper,
-  NumberIncrementStepper,
-  NumberDecrementStepper,
-  Collapse,
-  Flex,
   useDisclosure,
   type UseDisclosureReturn,
 } from "@chakra-ui/react";
 import { BiExport } from "react-icons/bi";
+import pluralize from "pluralize";
 
-import { useHandledAsyncCallback } from "~/utils/hooks";
+import { useHandledAsyncCallback, useTotalNumLogsSelected } from "~/utils/hooks";
 import { api } from "~/utils/api";
 import { useAppStore } from "~/state/store";
-import ActionButton from "./ActionButton";
-import InputDropdown from "../InputDropdown";
-import { FiChevronUp, FiChevronDown } from "react-icons/fi";
+import ActionButton from "../ActionButton";
 import InfoCircle from "../InfoCircle";
-
-const SUPPORTED_EXPORT_FORMATS = ["alpaca-finetune", "openai-fine-tune", "unformatted"];
+import { useFilters } from "../Filters/useFilters";
 
 const ExportButton = () => {
-  const selectedLogIds = useAppStore((s) => s.selectedLogs.selectedLogIds);
+  const totalNumLogsSelected = useTotalNumLogsSelected();
 
   const disclosure = useDisclosure();
 
@@ -46,7 +37,7 @@ const ExportButton = () => {
         onClick={disclosure.onOpen}
         label="Export"
         icon={BiExport}
-        isDisabled={selectedLogIds.size === 0}
+        isDisabled={!totalNumLogsSelected}
       />
       <ExportLogsModal disclosure={disclosure} />
     </>
@@ -57,33 +48,35 @@ export default ExportButton;
 
 const ExportLogsModal = ({ disclosure }: { disclosure: UseDisclosureReturn }) => {
   const selectedProjectId = useAppStore((s) => s.selectedProjectId);
+  const filters = useFilters().filters;
+  const defaultToSelected = useAppStore((s) => s.selectedLogs.defaultToSelected);
   const selectedLogIds = useAppStore((s) => s.selectedLogs.selectedLogIds);
-  const clearSelectedLogIds = useAppStore((s) => s.selectedLogs.clearSelectedLogIds);
+  const deselectedLogIds = useAppStore((s) => s.selectedLogs.deselectedLogIds);
+  const resetLogSelection = useAppStore((s) => s.selectedLogs.resetLogSelection);
+  const totalNumLogsSelected = useTotalNumLogsSelected();
 
-  const [selectedExportFormat, setSelectedExportFormat] = useState(SUPPORTED_EXPORT_FORMATS[0]);
-  const [testingSplit, setTestingSplit] = useState(10);
   const [removeDuplicates, setRemoveDuplicates] = useState(true);
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [excludeErrors, setExcludeErrors] = useState(true);
 
   useEffect(() => {
     if (disclosure.isOpen) {
-      setSelectedExportFormat(SUPPORTED_EXPORT_FORMATS[0]);
-      setTestingSplit(10);
       setRemoveDuplicates(true);
+      setExcludeErrors(true);
     }
   }, [disclosure.isOpen]);
 
   const exportLogsMutation = api.loggedCalls.export.useMutation();
 
   const [exportLogs, exportInProgress] = useHandledAsyncCallback(async () => {
-    if (!selectedProjectId || !selectedLogIds.size || !testingSplit || !selectedExportFormat)
-      return;
+    if (!selectedProjectId) return;
     const response = await exportLogsMutation.mutateAsync({
       projectId: selectedProjectId,
+      filters,
+      defaultToSelected,
       selectedLogIds: Array.from(selectedLogIds),
-      testingSplit,
-      selectedExportFormat,
+      deselectedLogIds: Array.from(deselectedLogIds),
       removeDuplicates,
+      excludeErrors,
     });
 
     const dataUrl = `data:application/pdf;base64,${response}`;
@@ -92,20 +85,23 @@ const ExportLogsModal = ({ disclosure }: { disclosure: UseDisclosureReturn }) =>
     const a = document.createElement("a");
 
     a.href = url;
-    a.download = `data.zip`;
+    a.download = `exported.jsonl`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
 
     disclosure.onClose();
-    clearSelectedLogIds();
+    resetLogSelection();
   }, [
     exportLogsMutation,
     selectedProjectId,
+    filters,
+    defaultToSelected,
     selectedLogIds,
-    testingSplit,
-    selectedExportFormat,
+    deselectedLogIds,
+    resetLogSelection,
     removeDuplicates,
+    excludeErrors,
   ]);
 
   return (
@@ -122,75 +118,35 @@ const ExportLogsModal = ({ disclosure }: { disclosure: UseDisclosureReturn }) =>
         <ModalBody maxW="unset">
           <VStack w="full" spacing={8} pt={4} alignItems="flex-start">
             <Text>
-              We'll export the <b>{selectedLogIds.size}</b> logs you have selected in the format of
-              your choice.
+              We'll export the <b>{totalNumLogsSelected.toLocaleString()}</b>{" "}
+              {pluralize("log", totalNumLogsSelected)} you have selected, including any associated
+              tags.
             </Text>
-            <VStack alignItems="flex-start" spacing={4}>
-              <Flex
-                flexDir={{ base: "column", md: "row" }}
-                alignItems={{ base: "flex-start", md: "center" }}
-              >
-                <HStack w={48} alignItems="center" spacing={1}>
-                  <Text fontWeight="bold">Format:</Text>
-                  <InfoCircle tooltipText="Format logs for for fine tuning or export them without formatting." />
-                </HStack>
-                <InputDropdown
-                  options={SUPPORTED_EXPORT_FORMATS}
-                  selectedOption={selectedExportFormat}
-                  onSelect={(option) => setSelectedExportFormat(option)}
-                  inputGroupProps={{ w: 48 }}
-                />
-              </Flex>
-              <Flex
-                flexDir={{ base: "column", md: "row" }}
-                alignItems={{ base: "flex-start", md: "center" }}
-              >
-                <HStack w={48} alignItems="center" spacing={1}>
-                  <Text fontWeight="bold">Testing Split:</Text>
-                  <InfoCircle tooltipText="The percent of your logs that will be reserved for testing and saved in another file. Logs are split randomly." />
-                </HStack>
-                <HStack>
-                  <NumberInput
-                    defaultValue={10}
-                    onChange={(_, num) => setTestingSplit(num)}
-                    min={1}
-                    max={100}
-                    w={48}
-                  >
-                    <NumberInputField />
-                    <NumberInputStepper>
-                      <NumberIncrementStepper />
-                      <NumberDecrementStepper />
-                    </NumberInputStepper>
-                  </NumberInput>
-                </HStack>
-              </Flex>
-            </VStack>
             <VStack alignItems="flex-start" spacing={0}>
-              <Button
-                variant="unstyled"
-                color="blue.600"
-                onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
-              >
+              <VStack align="stretch" pt={4}>
                 <HStack>
-                  <Text>Advanced Options</Text>
-                  <Icon as={showAdvancedOptions ? FiChevronUp : FiChevronDown} />
+                  <Checkbox
+                    colorScheme="blue"
+                    isChecked={removeDuplicates}
+                    onChange={(e) => setRemoveDuplicates(e.target.checked)}
+                  >
+                    <Text>Remove duplicates</Text>
+                  </Checkbox>
+                  <InfoCircle tooltipText="To avoid overfitting and speed up training, automatically deduplicate logs with matching input and output." />
                 </HStack>
-              </Button>
-              <Collapse in={showAdvancedOptions} unmountOnExit={true}>
-                <VStack align="stretch" pt={4}>
-                  <HStack>
-                    <Checkbox
-                      colorScheme="blue"
-                      isChecked={removeDuplicates}
-                      onChange={(e) => setRemoveDuplicates(e.target.checked)}
-                    >
-                      <Text>Remove duplicates</Text>
-                    </Checkbox>
-                    <InfoCircle tooltipText="To avoid overfitting and speed up training, automatically deduplicate logs with matching input and output." />
-                  </HStack>
-                </VStack>
-              </Collapse>
+              </VStack>
+              <VStack align="stretch" pt={4}>
+                <HStack>
+                  <Checkbox
+                    colorScheme="blue"
+                    isChecked={excludeErrors}
+                    onChange={(e) => setExcludeErrors(e.target.checked)}
+                  >
+                    <Text>Exclude errored logs</Text>
+                  </Checkbox>
+                  <InfoCircle tooltipText="Exclude logs with status codes other than 200." />
+                </HStack>
+              </VStack>
             </VStack>
           </VStack>
         </ModalBody>

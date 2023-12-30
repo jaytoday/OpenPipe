@@ -1,10 +1,17 @@
 import type { ApiKey, Project } from "@prisma/client";
 import { TRPCError, initTRPC } from "@trpc/server";
 import { type CreateNextContextOptions } from "@trpc/server/adapters/next";
+import { type NextApiResponse } from "next/types";
 import superjson from "superjson";
 import { type OpenApiMeta } from "trpc-openapi";
 import { ZodError } from "zod";
+import * as SentryModule from "@sentry/nextjs";
+import { type IncomingHttpHeaders } from "http";
+
 import { prisma } from "~/server/db";
+import { ensureDefaultExport } from "~/utils/utils";
+
+const Sentry = ensureDefaultExport(SentryModule);
 
 type CreateContextOptions = {
   key:
@@ -12,6 +19,8 @@ type CreateContextOptions = {
         project: Project;
       })
     | null;
+  headers: IncomingHttpHeaders;
+  res: NextApiResponse;
 };
 
 /**
@@ -27,6 +36,8 @@ type CreateContextOptions = {
 export const createInnerTRPCContext = (opts: CreateContextOptions) => {
   return {
     key: opts.key,
+    headers: opts.headers,
+    res: opts.res,
   };
 };
 
@@ -38,7 +49,7 @@ export const createOpenApiContext = async (opts: CreateNextContextOptions) => {
   if (!apiKey) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
-  const key = await prisma.apiKey.findUnique({
+  const key = await prisma.apiKey.findFirst({
     where: { apiKey },
     include: { project: true },
   });
@@ -48,6 +59,8 @@ export const createOpenApiContext = async (opts: CreateNextContextOptions) => {
 
   return createInnerTRPCContext({
     key,
+    headers: req.headers,
+    res,
   });
 };
 
@@ -71,7 +84,13 @@ const t = initTRPC
 
 export const createOpenApiRouter = t.router;
 
-export const openApiPublicProc = t.procedure;
+const sentryMiddleware = t.middleware(
+  Sentry.Handlers.trpcMiddleware({
+    attachRpcInput: true,
+  }),
+);
+
+export const openApiPublicProc = t.procedure.use(sentryMiddleware);
 
 /** Reusable middleware that enforces users are logged in before running the procedure. */
 const enforceApiKey = t.middleware(async ({ ctx, next }) => {
@@ -92,4 +111,4 @@ const enforceApiKey = t.middleware(async ({ ctx, next }) => {
  *
  * @see https://trpc.io/docs/procedures
  */
-export const openApiProtectedProc = t.procedure.use(enforceApiKey);
+export const openApiProtectedProc = t.procedure.use(sentryMiddleware.unstable_pipe(enforceApiKey));

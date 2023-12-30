@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
-  Heading,
   VStack,
   Icon,
   HStack,
@@ -9,32 +8,28 @@ import {
   Box,
   Link as ChakraLink,
   Flex,
-  useBreakpointValue,
+  Tooltip,
+  type BoxProps,
 } from "@chakra-ui/react";
 import Head from "next/head";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { BsGearFill, BsGithub, BsPersonCircle } from "react-icons/bs";
-import { IoStatsChartOutline } from "react-icons/io5";
-import { RiHome3Line, RiFlaskLine } from "react-icons/ri";
-import { AiOutlineThunderbolt } from "react-icons/ai";
+import { IoStatsChartOutline, IoSpeedometerOutline } from "react-icons/io5";
+import { AiOutlineThunderbolt, AiOutlineDatabase } from "react-icons/ai";
+import { FaBalanceScale, FaReadme } from "react-icons/fa";
 import { signIn, useSession } from "next-auth/react";
+
 import ProjectMenu from "./ProjectMenu";
 import NavSidebarOption from "./NavSidebarOption";
 import IconLink from "./IconLink";
-import { BetaModal } from "./BetaModal";
-import { useAppStore } from "~/state/store";
+import { BetaModal } from "../BetaModal";
+import { useIsMissingBetaAccess } from "~/utils/hooks";
 
-const Divider = () => <Box h="1px" bgColor="gray.300" w="full" />;
+const Divider = (props: BoxProps) => <Box h="1px" bgColor="gray.300" w="full" {...props} />;
 
 const NavSidebar = () => {
   const user = useSession().data;
-
-  // Hack to get around initial flash, see https://github.com/chakra-ui/chakra-ui/issues/6452
-  const isMobile = useBreakpointValue({ base: true, md: false, ssr: false });
-  const renderCount = useRef(0);
-  renderCount.current++;
-
-  const displayLogo = isMobile && renderCount.current > 1;
 
   return (
     <VStack
@@ -48,24 +43,18 @@ const NavSidebar = () => {
       borderRightWidth={1}
       borderColor="gray.300"
     >
-      {displayLogo && (
-        <>
-          <HStack
-            as={Link}
-            href="/"
-            _hover={{ textDecoration: "none" }}
-            spacing={{ base: 1, md: 0 }}
-            mx={2}
-            py={{ base: 1, md: 2 }}
-          >
-            <Image src="/logo.svg" alt="" boxSize={6} mr={4} ml={{ base: 0.5, md: 0 }} />
-            <Heading size="md" fontFamily="inconsolata, monospace">
-              OpenPipe
-            </Heading>
-          </HStack>
-          <Divider />
-        </>
-      )}
+      <HStack
+        as={Link}
+        href="/"
+        _hover={{ textDecoration: "none" }}
+        spacing={{ base: 1, md: 0 }}
+        mx={2}
+        py={{ base: 1, md: 2 }}
+        display={{ md: "none" }}
+      >
+        <Image src="/logo.svg" alt="" boxSize={6} mr={4} ml={0.5} />
+      </HStack>
+      <Divider display={{ md: "none" }} />
 
       <VStack align="flex-start" overflowY="auto" overflowX="hidden" flex={1}>
         {user != null && (
@@ -73,10 +62,10 @@ const NavSidebar = () => {
             <ProjectMenu />
             <Divider />
 
-            <IconLink icon={RiHome3Line} label="Dashboard" href="/dashboard" beta />
-            <IconLink icon={IoStatsChartOutline} label="Request Logs" href="/request-logs" beta />
-            <IconLink icon={AiOutlineThunderbolt} label="Fine Tunes" href="/fine-tunes" beta />
-            <IconLink icon={RiFlaskLine} label="Experiments" href="/experiments" />
+            <IconLink icon={IoStatsChartOutline} label="Request Logs" href="/request-logs" />
+            <IconLink icon={AiOutlineDatabase} label="Datasets" href="/datasets" />
+            <IconLink icon={AiOutlineThunderbolt} label="Fine Tunes" href="/fine-tunes" />
+            <IconLink icon={FaBalanceScale} label="Evals" href="/evals" />
             <VStack w="full" alignItems="flex-start" spacing={0} pt={8}>
               <Text
                 pl={2}
@@ -89,6 +78,7 @@ const NavSidebar = () => {
                 CONFIGURATION
               </Text>
               <IconLink icon={BsGearFill} label="Project Settings" href="/project/settings" />
+              <IconLink icon={IoSpeedometerOutline} label="Usage" href="/usage" />
             </VStack>
           </>
         )}
@@ -113,7 +103,7 @@ const NavSidebar = () => {
       </VStack>
 
       <Divider />
-      <VStack spacing={0} align="center">
+      <Flex flexDir={{ base: "column-reverse", md: "row" }} align="center" justify="center">
         <ChakraLink
           href="https://github.com/openpipe/openpipe"
           target="_blank"
@@ -123,7 +113,19 @@ const NavSidebar = () => {
         >
           <Icon as={BsGithub} boxSize={6} />
         </ChakraLink>
-      </VStack>
+        <Tooltip label="View Docs">
+          <ChakraLink
+            href="https://docs.openpipe.ai"
+            target="_blank"
+            color="gray.500"
+            _hover={{ color: "gray.800" }}
+            p={2}
+            mt={1}
+          >
+            <Icon as={FaReadme} boxSize={6} />
+          </ChakraLink>
+        </Tooltip>
+      </Flex>
     </VStack>
   );
 };
@@ -133,13 +135,16 @@ export default function AppShell({
   title,
   requireAuth,
   requireBeta,
+  containerProps,
 }: {
   children: React.ReactNode;
   title?: string;
   requireAuth?: boolean;
   requireBeta?: boolean;
+  containerProps?: BoxProps;
 }) {
   const [vh, setVh] = useState("100vh"); // Default height to prevent flicker on initial render
+  const router = useRouter();
 
   useEffect(() => {
     const setHeight = () => {
@@ -167,8 +172,7 @@ export default function AppShell({
     }
   }, [requireAuth, user, authLoading]);
 
-  const flags = useAppStore((s) => s.featureFlags.featureFlags);
-  const flagsLoaded = useAppStore((s) => s.featureFlags.flagsLoaded);
+  const isMissingBetaAccess = useIsMissingBetaAccess();
 
   return (
     <>
@@ -177,11 +181,11 @@ export default function AppShell({
           <title>{title ? `${title} | OpenPipe` : "OpenPipe"}</title>
         </Head>
         <NavSidebar />
-        <Box h="100%" flex={1} overflowY="auto" bgColor="gray.50">
+        <Box h="100%" flex={1} overflowY="auto" bgColor="gray.50" {...containerProps}>
           {children}
         </Box>
       </Flex>
-      {requireBeta && flagsLoaded && !flags.betaAccess && <BetaModal />}
+      <BetaModal isOpen={!!requireBeta && isMissingBetaAccess} onClose={router.back} />
     </>
   );
 }

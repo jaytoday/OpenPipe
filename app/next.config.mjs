@@ -42,7 +42,7 @@ let config = {
 
 config = nextRoutes()(config);
 
-if (env.NEXT_PUBLIC_SENTRY_DSN && env.SENTRY_AUTH_TOKEN) {
+if (env.NEXT_PUBLIC_SENTRY_DSN) {
   // @ts-expect-error - `withSentryConfig` is not typed correctly
   config = withSentryConfig(
     config,

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   Box,
   Heading,
@@ -9,36 +10,38 @@ import {
   Collapse,
   HStack,
   VStack,
-  Button,
-  ButtonGroup,
   Text,
   Checkbox,
+  Link as ChakraLink,
 } from "@chakra-ui/react";
-import Link from "next/link";
 
 import dayjs from "~/utils/dayjs";
 import { type RouterOutputs } from "~/utils/api";
-import { FormattedJson } from "./FormattedJson";
+import { FormattedJson } from "../FormattedJson";
 import { useAppStore } from "~/state/store";
-import { useIsClientRehydrated, useLoggedCalls, useTagNames } from "~/utils/hooks";
-import { useMemo } from "react";
-import { StaticColumnKeys } from "~/state/columnVisiblitySlice";
+import {
+  useIsClientInitialized,
+  useLoggedCalls,
+  useTotalNumLogsSelected,
+  useTagNames,
+} from "~/utils/hooks";
+import { StaticColumnKeys } from "~/state/columnVisibilitySlice";
+import { useFilters } from "../Filters/useFilters";
 
 type LoggedCall = RouterOutputs["loggedCalls"]["list"]["calls"][0];
 
 export const TableHeader = ({ showOptions }: { showOptions?: boolean }) => {
-  const matchingLogIds = useLoggedCalls().data?.matchingLogIds;
-  const selectedLogIds = useAppStore((s) => s.selectedLogs.selectedLogIds);
-  const addAll = useAppStore((s) => s.selectedLogs.addSelectedLogIds);
-  const clearAll = useAppStore((s) => s.selectedLogs.clearSelectedLogIds);
-  const allSelected = useMemo(() => {
-    if (!matchingLogIds || !matchingLogIds.length) return false;
-    return matchingLogIds.every((id) => selectedLogIds.has(id));
-  }, [selectedLogIds, matchingLogIds]);
+  const matchingCount = useLoggedCalls().data?.count;
+  const deselectedLogIds = useAppStore((s) => s.selectedLogs.deselectedLogIds);
+  const defaultToSelected = useAppStore((s) => s.selectedLogs.defaultToSelected);
+  const toggleAllSelected = useAppStore((s) => s.selectedLogs.toggleAllSelected);
   const tagNames = useTagNames().data;
   const visibleColumns = useAppStore((s) => s.columnVisibility.visibleColumns);
-  const isClientRehydrated = useIsClientRehydrated();
-  if (!isClientRehydrated) return null;
+
+  const totalNumLogsSelected = useTotalNumLogsSelected();
+
+  const isClientInitialized = useIsClientInitialized();
+  if (!isClientInitialized) return null;
 
   return (
     <Thead>
@@ -47,14 +50,13 @@ export const TableHeader = ({ showOptions }: { showOptions?: boolean }) => {
           <Th pr={0}>
             <HStack minW={16}>
               <Checkbox
-                isChecked={allSelected}
-                onChange={() => {
-                  allSelected ? clearAll() : addAll(matchingLogIds || []);
-                }}
+                isChecked={defaultToSelected && !deselectedLogIds.size && totalNumLogsSelected > 0}
+                onChange={toggleAllSelected}
+                _hover={{ borderColor: "gray.300" }}
               />
               <Text>
-                ({selectedLogIds.size ? `${selectedLogIds.size}/` : ""}
-                {matchingLogIds?.length || 0})
+                ({totalNumLogsSelected ? `${totalNumLogsSelected.toLocaleString()}/` : ""}
+                {(matchingCount ?? 0).toLocaleString()})
               </Text>
             </HStack>
           </Th>
@@ -71,6 +73,7 @@ export const TableHeader = ({ showOptions }: { showOptions?: boolean }) => {
         {visibleColumns.has(StaticColumnKeys.DURATION) && <Th isNumeric>Duration</Th>}
         {visibleColumns.has(StaticColumnKeys.INPUT_TOKENS) && <Th isNumeric>Input tokens</Th>}
         {visibleColumns.has(StaticColumnKeys.OUTPUT_TOKENS) && <Th isNumeric>Output tokens</Th>}
+        {visibleColumns.has(StaticColumnKeys.COST) && <Th isNumeric>Cost</Th>}
         {visibleColumns.has(StaticColumnKeys.STATUS_CODE) && <Th isNumeric>Status</Th>}
       </Tr>
     </Thead>
@@ -88,11 +91,15 @@ export const TableRow = ({
   onToggle: () => void;
   showOptions?: boolean;
 }) => {
-  const isError = loggedCall.modelResponse?.statusCode !== 200;
+  const isError = loggedCall.statusCode !== 200;
   const requestedAt = dayjs(loggedCall.requestedAt).format("MMMM D h:mm A");
   const fullTime = dayjs(loggedCall.requestedAt).toString();
 
-  const isChecked = useAppStore((s) => s.selectedLogs.selectedLogIds.has(loggedCall.id));
+  const isChecked = useAppStore(
+    (s) =>
+      (s.selectedLogs.defaultToSelected && !s.selectedLogs.deselectedLogIds.has(loggedCall.id)) ||
+      s.selectedLogs.selectedLogIds.has(loggedCall.id),
+  );
   const toggleChecked = useAppStore((s) => s.selectedLogs.toggleSelectedLogId);
 
   const tagNames = useTagNames().data;
@@ -102,8 +109,8 @@ export const TableRow = ({
     return tagNames?.filter((tagName) => visibleColumns.has(tagName)) ?? [];
   }, [tagNames, visibleColumns]);
 
-  const isClientRehydrated = useIsClientRehydrated();
-  if (!isClientRehydrated) return null;
+  const isClientInitialized = useIsClientInitialized();
+  if (!isClientInitialized) return null;
 
   return (
     <>
@@ -118,7 +125,11 @@ export const TableRow = ({
       >
         {showOptions && (
           <Td>
-            <Checkbox isChecked={isChecked} onChange={() => toggleChecked(loggedCall.id)} />
+            <Checkbox
+              isChecked={isChecked}
+              onChange={() => toggleChecked(loggedCall.id)}
+              _hover={{ borderColor: "gray.300" }}
+            />
           </Td>
         )}
         {visibleColumns.has(StaticColumnKeys.SENT_AT) && (
@@ -152,49 +163,83 @@ export const TableRow = ({
           <Td key={tagName}>{loggedCall.tags[tagName]}</Td>
         ))}
         {visibleColumns.has(StaticColumnKeys.DURATION) && (
+          <Td isNumeric>{((loggedCall.durationMs ?? 0) / 1000).toFixed(2)}s</Td>
+        )}
+        {visibleColumns.has(StaticColumnKeys.INPUT_TOKENS) && (
+          <Td isNumeric>{loggedCall.inputTokens}</Td>
+        )}
+        {visibleColumns.has(StaticColumnKeys.OUTPUT_TOKENS) && (
+          <Td isNumeric>{loggedCall.outputTokens}</Td>
+        )}
+        {visibleColumns.has(StaticColumnKeys.COST) && (
           <Td isNumeric>
-            {loggedCall.cacheHit ? (
-              <Text color="gray.500">Cached</Text>
-            ) : (
-              ((loggedCall.modelResponse?.durationMs ?? 0) / 1000).toFixed(2) + "s"
+            {loggedCall.cost && (
+              <Tooltip label={`$${loggedCall.cost.toFixed(6)}`}>
+                <Text>${loggedCall.cost.toFixed(3)}</Text>
+              </Tooltip>
             )}
           </Td>
         )}
-        {visibleColumns.has(StaticColumnKeys.INPUT_TOKENS) && (
-          <Td isNumeric>{loggedCall.modelResponse?.inputTokens}</Td>
-        )}
-        {visibleColumns.has(StaticColumnKeys.OUTPUT_TOKENS) && (
-          <Td isNumeric>{loggedCall.modelResponse?.outputTokens}</Td>
-        )}
         {visibleColumns.has(StaticColumnKeys.STATUS_CODE) && (
           <Td sx={{ color: isError ? "red.500" : "green.500", fontWeight: "semibold" }} isNumeric>
-            {loggedCall.modelResponse?.statusCode ?? "No response"}
+            {loggedCall.statusCode ?? "No response"}
           </Td>
         )}
       </Tr>
-      <Tr>
-        <Td colSpan={visibleColumns.size + 1} w="full" p={0}>
+      <Tr maxW="full">
+        <Td colSpan={visibleColumns.size + 1} w="full" maxW="full" p={0}>
           <Collapse in={isExpanded} unmountOnExit={true}>
-            <VStack p={4} align="stretch">
-              <HStack align="stretch">
-                <VStack flex={1} align="stretch">
-                  <Heading size="sm">Input</Heading>
-                  <FormattedJson json={loggedCall.modelResponse?.reqPayload} />
-                </VStack>
-                <VStack flex={1} align="stretch">
-                  <Heading size="sm">Output</Heading>
-                  <FormattedJson json={loggedCall.modelResponse?.respPayload} />
-                </VStack>
-              </HStack>
-              <ButtonGroup alignSelf="flex-end">
-                <Button as={Link} colorScheme="blue" href={{ pathname: "/experiments" }}>
-                  Experiments
-                </Button>
-              </ButtonGroup>
-            </VStack>
+            <HStack align="stretch" px={6} pt={2} pb={4} spacing={4}>
+              <VStack flex={1} align="stretch">
+                <Heading size="sm">Input</Heading>
+                <FormattedJson json={loggedCall.reqPayload} />
+              </VStack>
+              <VStack flex={1} align="stretch">
+                <Heading size="sm">Output</Heading>
+                <FormattedJson json={loggedCall.respPayload} />
+              </VStack>
+            </HStack>
           </Collapse>
         </Td>
       </Tr>
     </>
+  );
+};
+
+export const EmptyTableRow = ({ filtersApplied = true }: { filtersApplied?: boolean }) => {
+  const visibleColumns = useAppStore((s) => s.columnVisibility.visibleColumns);
+  const filters = useFilters().filters;
+  const { isLoading } = useLoggedCalls();
+
+  if (isLoading) return null;
+
+  if (filters.length && filtersApplied) {
+    return (
+      <Tr>
+        <Td w="full" colSpan={visibleColumns.size + 1}>
+          <Text color="gray.500" textAlign="center" w="full" p={4}>
+            No matching request logs found. Try removing some filters.
+          </Text>
+        </Td>
+      </Tr>
+    );
+  }
+
+  return (
+    <Tr>
+      <Td w="full" colSpan={visibleColumns.size + 1}>
+        <Text color="gray.500" textAlign="center" w="full" p={4}>
+          This project has no request logs. Learn how to add request logs to your project in our{" "}
+          <ChakraLink
+            href="https://docs.openpipe.ai/getting-started/quick-start"
+            target="_blank"
+            color="blue.600"
+          >
+            Quick Start
+          </ChakraLink>{" "}
+          guide.
+        </Text>
+      </Td>
+    </Tr>
   );
 };

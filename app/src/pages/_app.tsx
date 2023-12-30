@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { type Session } from "next-auth";
 import { SessionProvider } from "next-auth/react";
 import { type AppType } from "next/app";
@@ -6,14 +7,18 @@ import Favicon from "~/components/Favicon";
 import Head from "next/head";
 import { ChakraThemeProvider } from "~/theme/ChakraThemeProvider";
 import { SyncAppStore } from "~/state/sync";
-import NextAdapterApp from "next-query-params/app";
+import NextAdapterPages from "next-query-params/pages";
 import { QueryParamProvider } from "use-query-params";
-import { PosthogAppProvider } from "~/utils/analytics/posthog";
+import { FrontendAnalyticsProvider } from "~/utils/analytics/analytics";
+import { useAppStore } from "~/state/store";
 
 const MyApp: AppType<{ session: Session | null }> = ({
   Component,
   pageProps: { session, ...pageProps },
 }) => {
+  const markMounted = useAppStore().markMounted;
+  useEffect(markMounted, [markMounted]);
+
   return (
     <>
       <Head>
@@ -34,15 +39,15 @@ const MyApp: AppType<{ session: Session | null }> = ({
         <meta name="twitter:image" content="/og.png" />
       </Head>
       <SessionProvider session={session}>
-        <PosthogAppProvider>
+        <FrontendAnalyticsProvider>
           <SyncAppStore />
           <Favicon />
           <ChakraThemeProvider>
-            <QueryParamProvider adapter={NextAdapterApp}>
+            <QueryParamProvider adapter={NextAdapterPages}>
               <Component {...pageProps} />
             </QueryParamProvider>
           </ChakraThemeProvider>
-        </PosthogAppProvider>
+        </FrontendAnalyticsProvider>
       </SessionProvider>
     </>
   );

@@ -78,18 +78,16 @@ export const requireCanModifyProject = async (projectId: string, ctx: TRPCContex
   }
 };
 
-export const requireCanViewExperiment = (experimentId: string, ctx: TRPCContext): Promise<void> => {
-  // Right now all experiments are publicly viewable, so this is a no-op.
+export const requireCanModifyPruningRule = async (pruningRuleId: string, ctx: TRPCContext) => {
   ctx.markAccessControlRun();
-  return Promise.resolve();
-};
 
-export const canModifyExperiment = async (experimentId: string, userId: string) => {
-  const [adminUser, experiment] = await Promise.all([
-    isAdmin(userId),
-    prisma.experiment.findFirst({
-      where: {
-        id: experimentId,
+  const userId = ctx.session?.user.id;
+  if (!userId) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+  const pruningRule = await prisma.pruningRule.findFirst({
+    where: {
+      id: pruningRuleId,
+      dataset: {
         project: {
           projectUsers: {
             some: {
@@ -99,23 +97,10 @@ export const canModifyExperiment = async (experimentId: string, userId: string) 
           },
         },
       },
-    }),
-  ]);
+    },
+  });
 
-  return adminUser || !!experiment;
-};
-
-export const requireCanModifyExperiment = async (experimentId: string, ctx: TRPCContext) => {
-  ctx.markAccessControlRun();
-
-  const userId = ctx.session?.user.id;
-  if (!userId) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-
-  if (!(await canModifyExperiment(experimentId, userId))) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
+  if (!pruningRule) throw new TRPCError({ code: "UNAUTHORIZED" });
 };
 
 export const requireIsAdmin = async (ctx: TRPCContext) => {
